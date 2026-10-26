@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Product Safety Check (Demo Dataset)</title>
+<style>
+  :root { color-scheme: light dark;
+    --bg:#f3f5f1; --card:#ffffff; --ink:#10231c; --mute:#4d6258; --line:#c9d3cb;
+    --good:#14663d; --good-bg:#dff1e6; --warn:#7a4f00; --warn-bg:#fdefc7; --bad:#9c2b19; --bad-bg:#fbe1db; --btn:#145c38; --btn-ink:#ffffff; }
+  @media (prefers-color-scheme: dark) { :root {
+    --bg:#0c1a15; --card:#13251e; --ink:#eaf2ed; --mute:#a8bdb2; --line:#2c443a;
+    --good:#7fe0ab; --good-bg:#163a28; --warn:#ffd36b; --warn-bg:#3a2d0a; --bad:#ff9a86; --bad-bg:#401913; --btn:#7fe0ab; --btn-ink:#06150e; } }
+  * { box-sizing:border-box; }
+  body { margin:0; font:16px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif; background:var(--bg); color:var(--ink); }
+  main { width:min(960px,100% - 32px); margin:28px auto 60px; display:grid; gap:18px; }
+  h1 { margin:0; font-size:1.7rem; } h2 { margin:0 0 12px; font-size:1.1rem; }
+  p.sub { margin:6px 0 0; color:var(--mute); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:14px; }
+  label { display:block; font-size:.85rem; font-weight:600; color:var(--mute); margin-bottom:4px; }
+  input, select { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--ink); font:inherit; }
+  input:focus, select:focus { outline:3px solid #f2a900; outline-offset:1px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; margin-top:16px; align-items:center; }
+  button { font:inherit; font-weight:600; border-radius:10px; padding:10px 18px; cursor:pointer; border:1px solid var(--line); background:transparent; color:var(--ink); }
+  button.primary { background:var(--btn); color:var(--btn-ink); border-color:transparent; }
+  .verdict { display:flex; gap:18px; align-items:center; border-radius:14px; padding:18px 20px; border:1px solid; }
+  .verdict.GOOD { background:var(--good-bg); color:var(--good); border-color:var(--good); }
+  .verdict.CAUTION { background:var(--warn-bg); color:var(--warn); border-color:var(--warn); }
+  .verdict.UNSAFE { background:var(--bad-bg); color:var(--bad); border-color:var(--bad); }
+  .verdict b { font-size:2.2rem; line-height:1; } .verdict h3 { margin:0; font-size:1.3rem; }
+  ul { margin:10px 0 0; padding-left:20px; } li { margin:4px 0; }
+  table { width:100%; border-collapse:collapse; font-size:.9rem; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th { color:var(--mute); font-weight:600; } .wrap { overflow-x:auto; }
+  .tag { font-weight:700; } .tag.GOOD { color:var(--good); } .tag.CAUTION { color:var(--warn); } .tag.UNSAFE { color:var(--bad); }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Product Safety Check</h1>
+    <p class="sub">Dummy dataset (no database, no API key). Enter product details and get Safe / Caution / Unsafe with reasons.</p>
+  </header>
+
+  <section class="card">
+    <h2>Enter product details</h2>
+    <div class="grid">
+      <div><label for="produce">Produce</label><select id="produce"></select></div>
+      <div><label for="days">Days since harvest</label><input id="days" type="number" min="0" step="1"></div>
+      <div><label for="temp">Storage temp (&deg;C)</label><input id="temp" type="number" step="0.5"></div>
+      <div><label for="moist">Moisture (%)</label><input id="moist" type="number" min="0" max="100" step="0.1"></div>
+      <div><label for="pest">Pesticide residue (mg/kg)</label><input id="pest" type="number" min="0" step="0.01"></div>
+      <div><label for="transit">Transit time (hours)</label><input id="transit" type="number" min="0" step="1"></div>
+      <div><label for="afla">Aflatoxin (ppb, grains)</label><input id="afla" type="number" min="0" step="1" value="0"></div>
+      <div><label for="organic">Organic certified?</label><select id="organic"><option value="0">No</option><option value="1">Yes</option></select></div>
+    </div>
+    <div class="row">
+      <button class="primary" id="check">Check product</button>
+      <button id="sample-good">Sample: good</button>
+      <button id="sample-caution">Sample: caution</button>
+      <button id="sample-bad">Sample: unsafe</button>
+    </div>
+  </section>
+
+  <section id="result" hidden>
+    <div id="verdict" class="verdict"></div>
+    <div class="card" style="margin-top:14px"><h2>Why this result</h2><ul id="reasons"></ul></div>
+    <div class="card" style="margin-top:14px"><h2>Most similar products in the dataset</h2>
+      <div class="wrap"><table id="sim"></table></div></div>
+  </section>
+
+  <section class="card">
+    <h2>Full dummy dataset (<span id="count"></span> records)</h2>
+    <div class="wrap"><table id="all"></table></div>
+  </section>
+</main>
+
+<script>
+const LIMITS = {
+  Tomato:{days:10, temp:[10,15], moist:95, pest:0.5, transit:48},
+  Potato:{days:90, temp:[4,10],  moist:82, pest:0.2, transit:96},
+  Onion: {days:120,temp:[0,25],  moist:90, pest:0.1, transit:96},
+  Mango: {days:8,  temp:[10,14], moist:85, pest:0.5, transit:48},
+  Apple: {days:60, temp:[0,4],   moist:88, pest:0.5, transit:72},
+  Rice:  {days:365,temp:[10,25], moist:14, pest:0.1, transit:168},
+  Wheat: {days:365,temp:[10,25], moist:13, pest:0.1, transit:168},
+  Maize: {days:270,temp:[10,25], moist:14, pest:0.1, transit:168},
+};
+const GRAINS = ["Rice","Wheat","Maize"];
+const FIELDS = ["days","temp","moist","pest","transit","afla"];
+
+const DATA = [
+  // produce, days, storageTemp, moisture, pesticide, transitHrs, aflatoxin, organic, label
+  ["Tomato",3,12,93,0.12,20,0,1,"GOOD"],["Tomato",6,13,94,0.30,30,0,0,"GOOD"],
+  ["Tomato",11,17,95,0.45,50,0,0,"CAUTION"],["Tomato",14,22,97,0.80,70,0,0,"UNSAFE"],
+  ["Potato",20,8,80,0.05,40,0,1,"GOOD"],["Potato",60,9,81,0.15,80,0,0,"GOOD"],
+  ["Potato",95,12,80,0.15,80,0,0,"CAUTION"],["Potato",120,20,88,0.60,130,0,0,"UNSAFE"],
+  ["Onion",30,18,88,0.04,50,0,1,"GOOD"],["Onion",100,24,90,0.09,90,0,0,"GOOD"],
+  ["Onion",125,28,90,0.08,100,0,0,"CAUTION"],["Onion",150,32,95,0.40,120,0,0,"UNSAFE"],
+  ["Mango",2,12,83,0.10,16,0,1,"GOOD"],["Mango",5,13,84,0.35,36,0,0,"GOOD"],
+  ["Mango",9,16,85,0.40,52,0,0,"CAUTION"],["Mango",12,28,90,1.10,80,0,0,"UNSAFE"],
+  ["Apple",15,2,85,0.10,30,0,1,"GOOD"],["Apple",50,3,87,0.40,60,0,0,"GOOD"],
+  ["Apple",65,6,88,0.40,80,0,0,"CAUTION"],["Apple",90,15,92,1.20,100,0,0,"UNSAFE"],
+  ["Rice",60,18,12.5,0.02,60,2,1,"GOOD"],["Rice",200,22,13.8,0.08,120,6,0,"GOOD"],
+  ["Rice",370,27,14,0.08,150,14,0,"CAUTION"],["Rice",400,32,17,0.30,170,35,0,"UNSAFE"],
+  ["Wheat",45,16,11.8,0.03,50,1,1,"GOOD"],["Wheat",250,22,12.9,0.09,100,5,0,"GOOD"],
+  ["Wheat",370,27,13,0.08,150,12,0,"CAUTION"],["Wheat",390,33,16,0.28,175,30,0,"UNSAFE"],
+  ["Maize",40,17,12.8,0.03,50,3,1,"GOOD"],["Maize",180,23,13.7,0.08,100,9,0,"GOOD"],
+  ["Maize",275,27,14,0.08,140,16,0,"CAUTION"],["Maize",300,34,18,0.35,170,48,0,"UNSAFE"],
+].map(([produce,days,temp,moist,pest,transit,afla,organic,label])=>({produce,days,temp,moist,pest,transit,afla,organic,label}));
+
+function assess(x){
+  const L = LIMITS[x.produce], reasons = [];
+  let score = 100, fatal = false;
+  const hit=(pts,msg,f)=>{score-=pts; reasons.push(msg); if(f) fatal=true;};
+
+  if (x.pest > 2*L.pest) hit(60,`Pesticide ${x.pest} mg/kg is more than 2x the limit (${L.pest}).`,true);
+  else if (x.pest > L.pest) hit(25,`Pesticide ${x.pest} mg/kg is above the limit (${L.pest}).`);
+  else reasons.push(`Pesticide level OK (${x.pest} <= ${L.pest}).`);
+
+  if (x.afla > 20) hit(60,`Aflatoxin ${x.afla} ppb is above the safe limit (20).`,true);
+  else if (x.afla > 10 && GRAINS.includes(x.produce)) hit(10,`Aflatoxin ${x.afla} ppb is getting high (limit 20).`);
+
+  if (x.days > L.days*1.25) hit(35,`Stored ${x.days} days, far beyond shelf life (${L.days}).`,true);
+  else if (x.days > L.days) hit(18,`Stored ${x.days} days, past shelf life (${L.days}).`);
+  else reasons.push(`Freshness OK (${x.days} of ${L.days} days).`);
+
+  const [lo,hi]=L.temp;
+  if (x.temp>hi+8||x.temp<lo-8) hit(25,`Storage ${x.temp} C is far outside ${lo}-${hi} C.`);
+  else if (x.temp>hi||x.temp<lo) hit(10,`Storage ${x.temp} C is outside ideal ${lo}-${hi} C.`);
+  else reasons.push(`Storage temperature OK (${x.temp} C).`);
+
+  if (x.moist > L.moist+3) hit(25,`Moisture ${x.moist}% is far above ${L.moist}% (mould risk).`);
+  else if (x.moist > L.moist) hit(10,`Moisture ${x.moist}% is above ${L.moist}%.`);
+
+  if (x.transit > L.transit*1.5) hit(15,`Transit ${x.transit} h is too long (max ${L.transit}).`);
+  else if (x.transit > L.transit) hit(7,`Transit ${x.transit} h exceeds ${L.transit} h.`);
+
+  if (x.organic) { score = Math.min(100, score+3); reasons.push("Organic certified (+3)."); }
+  score = Math.max(0, Math.round(score));
+  const verdict = fatal||score<55 ? "UNSAFE" : score<80 ? "CAUTION" : "GOOD";
+  return {score, verdict, reasons};
+}
+
+function similar(x,k=3){
+  const pool = DATA.filter(d=>d.produce===x.produce);
+  const range = f => { const v=pool.map(d=>d[f]); return (Math.max(...v)-Math.min(...v))||1; };
+  const R = Object.fromEntries(FIELDS.map(f=>[f,range(f)]));
+  return pool.map(d=>({d, dist:Math.sqrt(FIELDS.reduce((s,f)=>s+((d[f]-x[f])/R[f])**2,0))}))
+             .sort((a,b)=>a.dist-b.dist).slice(0,k).map(o=>o.d);
+}
+
+const $ = (id) => document.getElementById(id);
+const COLS = ["produce","days","temp","moist","pest","transit","afla","organic","label"];
+const HEAD = ["Produce","Days","Temp C","Moist %","Pesticide","Transit h","Aflatoxin","Organic","Label"];
+
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function tableHtml(rows){
+  return "<tr>" + HEAD.map(h => "<th>"+h+"</th>").join("") + "</tr>" +
+    rows.map(r => "<tr>" + COLS.map(c =>
+      c === "label" ? '<td><span class="tag '+r.label+'">'+r.label+"</span></td>"
+      : c === "organic" ? "<td>"+(r.organic ? "Yes" : "No")+"</td>"
+      : "<td>"+esc(r[c])+"</td>").join("") + "</tr>").join("");
+}
+function fill(d){
+  ["produce","days","temp","moist","pest","transit","afla","organic"].forEach(k => $(k).value = d[k]);
+}
+function read(){
+  const n = (id) => parseFloat($(id).value);
+  const x = { produce:$("produce").value, days:n("days"), temp:n("temp"), moist:n("moist"),
+              pest:n("pest"), transit:n("transit"), afla:n("afla") || 0, organic:Number($("organic").value) };
+  return ["days","temp","moist","pest","transit"].every(k => Number.isFinite(x[k])) ? x : null;
+}
+function run(){
+  const x = read();
+  if (!x) { alert("Please fill all the fields."); return; }
+  const r = assess(x);
+  const icon = { GOOD:"✔", CAUTION:"!", UNSAFE:"✖" }[r.verdict];
+  const text = { GOOD:"Safe and good quality", CAUTION:"Use with caution", UNSAFE:"Not safe / poor quality" }[r.verdict];
+  $("verdict").className = "verdict " + r.verdict;
+  $("verdict").innerHTML = "<b>"+icon+"</b><div><h3>"+text+"</h3><div>Quality score: "+r.score+" / 100</div></div>";
+  $("reasons").innerHTML = r.reasons.map(t => "<li>"+esc(t)+"</li>").join("");
+  $("sim").innerHTML = tableHtml(similar(x));
+  $("result").hidden = false;
+  $("result").scrollIntoView({ behavior:"smooth", block:"start" });
+}
+
+$("produce").innerHTML = Object.keys(LIMITS).map(p => "<option>"+p+"</option>").join("");
+$("all").innerHTML = tableHtml(DATA);
+$("count").textContent = DATA.length;
+fill(DATA[0]);
+
+$("check").onclick = run;
+$("sample-good").onclick = () => { fill(DATA.find(d => d.produce==="Mango" && d.label==="GOOD")); run(); };
+$("sample-caution").onclick = () => { fill(DATA.find(d => d.produce==="Rice" && d.label==="CAUTION")); run(); };
+$("sample-bad").onclick = () => { fill(DATA.find(d => d.produce==="Tomato" && d.label==="UNSAFE")); run(); };
+</script>
+</body>
+</html>
